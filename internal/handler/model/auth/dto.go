@@ -1,4 +1,4 @@
-package dto
+package auth
 
 type RegistrationRequest struct {
 	Login    string `json:"login" validate:"required,min=4"`

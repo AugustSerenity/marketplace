@@ -8,4 +8,5 @@ import (
 
 type Service interface {
 	RegistrationUser(ctx context.Context, user *model.User) error
+	LoginUser(ctx context.Context, login, password string) (string, error)
 }

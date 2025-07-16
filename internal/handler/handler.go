@@ -43,7 +43,18 @@ func (h *Handler) LoginUser(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid JSON", http.StatusBadRequest)
 		return
 	}
-	
+
+	token, err := h.service.LoginUser(r.Context(), req.Login, req.Password)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
+
+	resp := auth.LoginResponse{
+		Token: token,
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
 }
 
 // Регистрирую пользователя

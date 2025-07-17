@@ -2,7 +2,9 @@ package handler
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/AugustSerenity/marketplace/internal/handler/model/ad"
@@ -10,18 +12,21 @@ import (
 	dto "github.com/AugustSerenity/marketplace/internal/handler/model/auth"
 	"github.com/AugustSerenity/marketplace/internal/middleware"
 	"github.com/AugustSerenity/marketplace/internal/model"
+	"github.com/go-playground/validator/v10"
 	"golang.org/x/crypto/bcrypt"
 )
 
 type Handler struct {
-	service Service
-	secret  string
+	service  Service
+	secret   string
+	validate *validator.Validate
 }
 
 func New(s Service, secret string) *Handler {
 	return &Handler{
-		service: s,
-		secret:  secret,
+		service:  s,
+		secret:   secret,
+		validate: validator.New(),
 	}
 }
 
@@ -49,6 +54,11 @@ func (h *Handler) LoginUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := h.validate.Struct(req); err != nil {
+		http.Error(w, "Validation failed: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
 	token, err := h.service.LoginUser(r.Context(), req.Login, req.Password)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
@@ -62,7 +72,6 @@ func (h *Handler) LoginUser(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
-// Регистрирую пользователя
 func (h *Handler) UserRegistration(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
@@ -72,9 +81,13 @@ func (h *Handler) UserRegistration(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var userData dto.RegistrationRequest
-	err := json.NewDecoder(r.Body).Decode(&userData)
-	if err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&userData); err != nil {
 		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.validate.Struct(userData); err != nil {
+		http.Error(w, "Validation failed: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -92,6 +105,12 @@ func (h *Handler) UserRegistration(w http.ResponseWriter, r *http.Request) {
 
 	err = h.service.RegistrationUser(r.Context(), &user)
 	if err != nil {
+		if strings.Contains(err.Error(), "duplicate key") {
+			http.Error(w, "User with this login already exists", http.StatusConflict)
+			return
+		}
+
+		log.Printf("Registration DB error: %v", err)
 		http.Error(w, "Failed to register user", http.StatusInternalServerError)
 		return
 	}
@@ -123,6 +142,11 @@ func (h *Handler) CreateAd(w http.ResponseWriter, r *http.Request) {
 	var req ad.CreateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.validate.Struct(req); err != nil {
+		http.Error(w, "Validation failed: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 

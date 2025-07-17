@@ -24,8 +24,8 @@ func New(s Service) *Handler {
 func (h *Handler) Route() http.Handler {
 	router := http.NewServeMux()
 
-	router.HandleFunc("POST /auth/register", h.UserRegistration)
-	router.HandleFunc("POST /auth/login", h.LoginUser)
+	router.HandleFunc("POST /auth-register", h.UserRegistration)
+	router.HandleFunc("POST /auth-login", h.LoginUser)
 
 	return router
 }

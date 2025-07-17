@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log"
 	"net/http"
 
 	"github.com/AugustSerenity/marketplace/internal/handler"
@@ -14,16 +15,19 @@ func main() {
 	db := storage.InitDB()
 	defer storage.CloseDB(db)
 
-	st := storage.New(db)
+	storage := storage.New(db)
 
-	srv := service.New(st)
+	authService := service.New(storage, "your-secret-key")
 
-	h := handler.New(srv)
+	h := handler.New(authService)
 
 	s := http.Server{
 		Addr:    portNumber,
 		Handler: h.Route(),
 	}
 
-	s.ListenAndServe()
+	log.Printf("Server started at http://localhost%s", portNumber)
+	if err := s.ListenAndServe(); err != nil {
+		log.Fatalf("Server failed: %v", err)
+	}
 }

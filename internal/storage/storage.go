@@ -4,9 +4,8 @@ import (
 	"context"
 	"database/sql"
 
-	_ "github.com/lib/pq"
-
 	"github.com/AugustSerenity/marketplace/internal/model"
+	_ "github.com/lib/pq"
 )
 
 type Storage struct {
@@ -25,7 +24,6 @@ func (s *Storage) CreateUser(ctx context.Context, user *model.User) error {
 		VALUES ($1, $2, $3)
 		RETURNING id
 	`
-	// Вставляем пользователя и получаем ID
 	return s.db.QueryRowContext(
 		ctx,
 		query,
@@ -33,4 +31,14 @@ func (s *Storage) CreateUser(ctx context.Context, user *model.User) error {
 		user.PasswordHash,
 		user.CreatedAt,
 	).Scan(&user.ID)
+}
+
+func (s *Storage) GetUserByLogin(ctx context.Context, login string) (*model.User, error) {
+	var user model.User
+	query := `SELECT id, login, password_hash, created_at FROM users WHERE login = $1`
+	err := s.db.QueryRowContext(ctx, query, login).Scan(&user.ID, &user.Login, &user.PasswordHash, &user.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &user, nil
 }

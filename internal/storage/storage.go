@@ -42,3 +42,22 @@ func (s *Storage) GetUserByLogin(ctx context.Context, login string) (*model.User
 	}
 	return &user, nil
 }
+
+func (s *Storage) CreateAd(ctx context.Context, ad *model.Ad) error {
+	query := `
+		INSERT INTO ads (title, description, image_url, price, author_id, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		RETURNING id
+	`
+
+	return s.db.QueryRowContext(
+		ctx,
+		query,
+		ad.Title,
+		ad.Description,
+		ad.ImageURL,
+		ad.Price,
+		ad.AuthorID,
+		ad.CreatedAt,
+	).Scan(&ad.ID)
+}

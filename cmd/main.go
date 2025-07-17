@@ -15,11 +15,11 @@ func main() {
 	db := storage.InitDB()
 	defer storage.CloseDB(db)
 
-	storage := storage.New(db)
+	st := storage.New(db)
 
-	authService := service.New(storage, "your-secret-key")
+	authService := service.New(st, "hello-Baddy")
 
-	h := handler.New(authService)
+	h := handler.New(authService, "hello-Baddy")
 
 	s := http.Server{
 		Addr:    portNumber,

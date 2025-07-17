@@ -49,3 +49,7 @@ func (s *Service) LoginUser(ctx context.Context, login, password string) (string
 
 	return tokenString, nil
 }
+
+func (s *Service) CreateAd(ctx context.Context, ad *model.Ad) error {
+	return s.storage.CreateAd(ctx, ad)
+}

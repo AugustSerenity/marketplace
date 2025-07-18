@@ -15,3 +15,22 @@ type Response struct {
 	Price       float64 `json:"price"`
 	AuthorID    int64   `json:"author_id"`
 }
+
+type ListRequest struct {
+	Page      int     `json:"page" validate:"gte=1"`
+	PageSize  int     `json:"page_size" validate:"gte=1,lte=100"`
+	SortBy    string  `json:"sort_by" validate:"oneof=created_at price"`
+	SortOrder string  `json:"sort_order" validate:"oneof=asc desc"`
+	MinPrice  float64 `json:"min_price"`
+	MaxPrice  float64 `json:"max_price"`
+}
+
+type ListResponse struct {
+	ID          int64   `json:"id"`
+	Title       string  `json:"title"`
+	Description string  `json:"description"`
+	ImageURL    string  `json:"image_url"`
+	Price       float64 `json:"price"`
+	AuthorLogin string  `json:"author_login"`
+	IsOwner     bool    `json:"is_owner"`
+}

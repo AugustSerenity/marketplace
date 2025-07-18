@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/AugustSerenity/marketplace/internal/handler/model/ad"
 	"github.com/AugustSerenity/marketplace/internal/model"
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
@@ -52,4 +53,8 @@ func (s *Service) LoginUser(ctx context.Context, login, password string) (string
 
 func (s *Service) CreateAd(ctx context.Context, ad *model.Ad) error {
 	return s.storage.CreateAd(ctx, ad)
+}
+
+func (s *Service) GetAds(ctx context.Context, req *ad.ListRequest, userID int64) ([]*model.AdWithAuthor, error) {
+	return s.storage.GetAds(ctx, req, userID)
 }

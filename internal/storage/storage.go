@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 
+	"github.com/AugustSerenity/marketplace/internal/handler/model/ad"
 	"github.com/AugustSerenity/marketplace/internal/model"
 	_ "github.com/lib/pq"
 )
@@ -60,4 +61,64 @@ func (s *Storage) CreateAd(ctx context.Context, ad *model.Ad) error {
 		ad.AuthorID,
 		ad.CreatedAt,
 	).Scan(&ad.ID)
+}
+
+func (s *Storage) GetAds(ctx context.Context, req *ad.ListRequest, userID int64) ([]*model.AdWithAuthor, error) {
+	query := `
+        SELECT 
+            a.id, 
+            a.title, 
+            a.description, 
+            a.image_url, 
+            a.price, 
+            a.author_id,
+            a.created_at,
+            u.login as author_login
+        FROM ads a
+        JOIN users u ON a.author_id = u.id
+        WHERE ($1 = 0 OR a.price >= $1)
+        AND ($2 = 0 OR a.price <= $2)
+        ORDER BY 
+            CASE WHEN $3 = 'price' AND $4 = 'asc' THEN a.price END ASC,
+            CASE WHEN $3 = 'price' AND $4 = 'desc' THEN a.price END DESC,
+            CASE WHEN $3 = 'created_at' AND $4 = 'asc' THEN a.created_at END ASC,
+            CASE WHEN $3 = 'created_at' AND $4 = 'desc' THEN a.created_at END DESC
+        LIMIT $5 OFFSET $6
+    `
+
+	offset := (req.Page - 1) * req.PageSize
+	rows, err := s.db.QueryContext(
+		ctx,
+		query,
+		req.MinPrice,
+		req.MaxPrice,
+		req.SortBy,
+		req.SortOrder,
+		req.PageSize,
+		offset,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ads []*model.AdWithAuthor
+	for rows.Next() {
+		var ad model.AdWithAuthor
+		if err := rows.Scan(
+			&ad.ID,
+			&ad.Title,
+			&ad.Description,
+			&ad.ImageURL,
+			&ad.Price,
+			&ad.AuthorID,
+			&ad.CreatedAt,
+			&ad.AuthorLogin,
+		); err != nil {
+			return nil, err
+		}
+		ads = append(ads, &ad)
+	}
+
+	return ads, nil
 }

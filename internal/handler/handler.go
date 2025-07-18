@@ -35,7 +35,8 @@ func (h *Handler) Route() http.Handler {
 
 	router.HandleFunc("POST /auth-register", h.UserRegistration)
 	router.HandleFunc("POST /auth-login", h.LoginUser)
-	router.Handle("POST /ads", middleware.AuthMiddleware(h.secret)(http.HandlerFunc(h.CreateAd)))
+	router.Handle("POST /create-ads", middleware.AuthMiddleware(h.secret)(http.HandlerFunc(h.CreateAd)))
+	router.Handle("GET /watch-ads", middleware.AuthMiddleware(h.secret)(http.HandlerFunc(h.GetAds)))
 
 	return router
 }
@@ -133,7 +134,7 @@ func (h *Handler) CreateAd(w http.ResponseWriter, r *http.Request) {
 	}
 
 	userIDVal := r.Context().Value("userID")
-	userID, ok := userIDVal.(uint64)
+	userID, ok := userIDVal.(int64)
 	if !ok {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
@@ -155,7 +156,7 @@ func (h *Handler) CreateAd(w http.ResponseWriter, r *http.Request) {
 		Description: req.Description,
 		ImageURL:    req.ImageURL,
 		Price:       req.Price,
-		AuthorID:    int64(userID),
+		AuthorID:    userID,
 		CreatedAt:   time.Now(),
 	}
 
@@ -176,4 +177,56 @@ func (h *Handler) CreateAd(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(resp)
+}
+
+func (h *Handler) GetAds(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+
+	if r.Method != http.MethodGet {
+		http.Error(w, "Only GET method is allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req ad.ListRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.validate.Struct(req); err != nil {
+		http.Error(w, "Validation failed: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	userID := int64(0)
+	if userIDVal := r.Context().Value("userID"); userIDVal != nil {
+		if id, ok := userIDVal.(int64); ok {
+			userID = id
+		}
+	}
+
+	ads, err := h.service.GetAds(r.Context(), &req, userID)
+	if err != nil {
+		http.Error(w, "Failed to fetch ads", http.StatusInternalServerError)
+		return
+	}
+
+	var resp []ad.ListResponse
+	for _, adItem := range ads {
+		resp = append(resp, ad.ListResponse{
+			ID:          adItem.ID,
+			Title:       adItem.Title,
+			Description: adItem.Description,
+			ImageURL:    adItem.ImageURL,
+			Price:       adItem.Price,
+			AuthorLogin: adItem.AuthorLogin,
+			IsOwner:     userID == adItem.AuthorID,
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+	}
 }

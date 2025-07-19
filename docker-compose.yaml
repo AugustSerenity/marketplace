@@ -1,0 +1,23 @@
+version: "3.8"
+
+services:
+  postgres-service:
+    image: postgres:latest
+    container_name: postgres_db
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=market
+    ports:
+      - "5433:5432"
+    volumes:
+      - ./migration/001_create_users_table.up.sql:/docker-entrypoint-initdb.d/001_create_users_table.up.sql
+      - ./migration/002_create_ads_table.up.sql:/docker-entrypoint-initdb.d/002_create_ads_table.up.sql
+
+  app:
+    build: ./
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres-service
+    restart: on-failure

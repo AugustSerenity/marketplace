@@ -1,33 +1,66 @@
 package main
 
 import (
+	"context"
+	"flag"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
+	"time"
 
+	"github.com/AugustSerenity/marketplace/internal/config"
 	"github.com/AugustSerenity/marketplace/internal/handler"
 	"github.com/AugustSerenity/marketplace/internal/service"
 	"github.com/AugustSerenity/marketplace/internal/storage"
 )
 
-const portNumber = ":8080"
+const (
+	shutdownTimeout = 5 * time.Second
+)
 
 func main() {
-	db := storage.InitDB()
+	configPath := flag.String("config", "config/config.yaml", "config file path")
+	flag.Parse()
+
+	cfg := config.ParseConfig(*configPath)
+
+	db := storage.InitDB(cfg.DB)
 	defer storage.CloseDB(db)
 
-	st := storage.New(db)
+	storage := storage.New(db)
 
-	authService := service.New(st, "hello-Baddy")
+	srv := service.New(storage, cfg.Secret)
 
-	h := handler.New(authService, "hello-Baddy")
+	h := handler.New(srv, cfg.Secret)
 
 	s := http.Server{
-		Addr:    portNumber,
-		Handler: h.Route(),
+		Addr:         cfg.Address,
+		Handler:      h.Route(),
+		IdleTimeout:  cfg.IdleTimeout,
+		ReadTimeout:  cfg.Timeout,
+		WriteTimeout: cfg.Timeout,
 	}
+	go func() {
+		err := s.ListenAndServe()
+		if err != nil {
+			log.Println("listen and serve error: %w", err)
+		}
+	}()
 
-	log.Printf("Server started at http://localhost%s", portNumber)
-	if err := s.ListenAndServe(); err != nil {
-		log.Fatalf("Server failed: %v", err)
+	log.Println("starting server: address", cfg.Server.Address)
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt, os.Interrupt)
+	<-quit
+
+	log.Println("stopping server")
+
+	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	defer cancel()
+
+	err := s.Shutdown(ctx)
+	if err != nil {
+		log.Println("shutdown server error: %w", err)
 	}
 }

@@ -1,0 +1,12 @@
+server:
+  address: ":8080"
+  timeout: 4s
+  iddle_timeout: 60s
+  shutdown_timeout: 10s
+db:
+  host: "postgres-service"
+  port: 5432
+  username: "postgres"
+  name: "market"
+  password: "postgres"
+secret: "secret_key"

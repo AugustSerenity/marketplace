@@ -31,6 +31,9 @@ func (s *Service) LoginUser(ctx context.Context, login, password string) (string
 
 	user, err := s.storage.GetUserByLogin(ctx, login)
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			return "", err
+		}
 		return "", errors.New("user not found")
 	}
 
@@ -52,6 +55,12 @@ func (s *Service) LoginUser(ctx context.Context, login, password string) (string
 }
 
 func (s *Service) CreateAd(ctx context.Context, ad *model.Ad) error {
+	if ad.Title == "" {
+		return errors.New("title cannot be empty")
+	}
+	if ad.Price <= 0 {
+		return errors.New("price must be positive")
+	}
 	return s.storage.CreateAd(ctx, ad)
 }
 

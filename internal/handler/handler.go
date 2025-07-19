@@ -173,13 +173,11 @@ func (h *Handler) CreateAd(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Проверка на валидность данных объявления
 	if err := h.validate.Struct(req); err != nil {
 		http.Error(w, "Validation failed: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	// Проверка названия объявления на запрещенные символы
 	invalidTitleRegex := `[^a-zA-Z0-9\s]`
 	if matched, _ := regexp.MatchString(invalidTitleRegex, req.Title); matched {
 		http.Error(w, "Invalid title characters", http.StatusBadRequest)
@@ -222,12 +220,42 @@ func (h *Handler) GetAds(w http.ResponseWriter, r *http.Request) {
 
 	q := r.URL.Query()
 
-	page, _ := strconv.Atoi(q.Get("page"))
-	pageSize, _ := strconv.Atoi(q.Get("page_size"))
+	page := 1
+	pageSize := 10
+
+	if val := q.Get("page"); val != "" {
+		if parsed, err := strconv.Atoi(val); err == nil {
+			page = parsed
+		}
+	}
+
+	if val := q.Get("page_size"); val != "" {
+		if parsed, err := strconv.Atoi(val); err == nil {
+			pageSize = parsed
+		}
+	}
+
 	sortBy := q.Get("sort_by")
 	sortOrder := q.Get("sort_order")
-	minPrice, _ := strconv.ParseFloat(q.Get("min_price"), 64)
-	maxPrice, _ := strconv.ParseFloat(q.Get("max_price"), 64)
+
+	minPrice := 0.0
+	if val := q.Get("min_price"); val != "" {
+		if parsed, err := strconv.ParseFloat(val, 64); err == nil {
+			minPrice = parsed
+		}
+	}
+
+	maxPrice := 0.0
+	if val := q.Get("max_price"); val != "" {
+		if parsed, err := strconv.ParseFloat(val, 64); err == nil {
+			maxPrice = parsed
+		}
+	}
+
+	if minPrice > maxPrice && maxPrice != 0 {
+		http.Error(w, "min_price cannot be greater than max_price", http.StatusBadRequest)
+		return
+	}
 
 	req := ad.ListRequest{
 		Page:      page,

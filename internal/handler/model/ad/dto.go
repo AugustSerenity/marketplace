@@ -21,8 +21,8 @@ type ListRequest struct {
 	PageSize  int     `json:"page_size" validate:"gte=1,lte=100"`
 	SortBy    string  `json:"sort_by" validate:"oneof=created_at price"`
 	SortOrder string  `json:"sort_order" validate:"oneof=asc desc"`
-	MinPrice  float64 `json:"min_price"`
-	MaxPrice  float64 `json:"max_price"`
+	MinPrice  float64 `json:"min_price" validate:"gte=0"`
+	MaxPrice  float64 `json:"max_price" validate:"gte=0"`
 }
 
 type ListResponse struct {

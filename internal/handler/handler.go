@@ -1,9 +1,12 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -68,6 +71,10 @@ func (h *Handler) LoginUser(w http.ResponseWriter, r *http.Request) {
 
 	token, err := h.service.LoginUser(r.Context(), req.Login, req.Password)
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			http.Error(w, "Request Timeout", http.StatusRequestTimeout)
+			return
+		}
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
@@ -101,6 +108,7 @@ func (h *Handler) UserRegistration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Хэширование пароля
 	hash, err := bcrypt.GenerateFromPassword([]byte(userData.Password), bcrypt.DefaultCost)
 	if err != nil {
 		http.Error(w, "Failed to hash password", http.StatusInternalServerError)
@@ -113,10 +121,15 @@ func (h *Handler) UserRegistration(w http.ResponseWriter, r *http.Request) {
 		CreatedAt:    time.Now(),
 	}
 
+	// Регистрация пользователя
 	err = h.service.RegistrationUser(r.Context(), &user)
 	if err != nil {
 		if strings.Contains(err.Error(), "duplicate key") {
 			http.Error(w, "User with this login already exists", http.StatusConflict)
+			return
+		}
+		if strings.Contains(err.Error(), "reserved login") {
+			http.Error(w, "Reserved login", http.StatusBadRequest)
 			return
 		}
 
@@ -160,8 +173,16 @@ func (h *Handler) CreateAd(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Проверка на валидность данных объявления
 	if err := h.validate.Struct(req); err != nil {
 		http.Error(w, "Validation failed: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Проверка названия объявления на запрещенные символы
+	invalidTitleRegex := `[^a-zA-Z0-9\s]`
+	if matched, _ := regexp.MatchString(invalidTitleRegex, req.Title); matched {
+		http.Error(w, "Invalid title characters", http.StatusBadRequest)
 		return
 	}
 

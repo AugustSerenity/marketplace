@@ -77,6 +77,19 @@ func TestHandler_LoginUser(t *testing.T) {
 			contentType: "",
 			wantStatus:  http.StatusBadRequest,
 		},
+		{
+			name:        "empty login or password",
+			requestBody: `{"login":"","password":""}`,
+			contentType: "application/json",
+			wantStatus:  http.StatusBadRequest,
+		},
+		{
+			name:        "context cancellation",
+			requestBody: `{"login":"user","password":"password123"}`,
+			contentType: "application/json",
+			mockError:   context.Canceled,
+			wantStatus:  http.StatusRequestTimeout,
+		},
 	}
 
 	for _, tt := range tests {
@@ -140,6 +153,19 @@ func TestHandler_UserRegistration(t *testing.T) {
 			name:        "missing content type",
 			requestBody: `{"login":"newuser","password":"password123"}`,
 			contentType: "",
+			wantStatus:  http.StatusBadRequest,
+		},
+		{
+			name:        "reserved login",
+			requestBody: `{"login":"admin","password":"password123"}`,
+			contentType: "application/json",
+			mockError:   errors.New("reserved login"),
+			wantStatus:  http.StatusBadRequest,
+		},
+		{
+			name:        "short password",
+			requestBody: `{"login":"user","password":"123"}`,
+			contentType: "application/json",
 			wantStatus:  http.StatusBadRequest,
 		},
 	}
@@ -207,6 +233,27 @@ func TestHandler_CreateAd(t *testing.T) {
 		{
 			name:       "invalid data",
 			request:    ad.CreateRequest{},
+			userID:     int64(1),
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name: "missing title",
+			request: ad.CreateRequest{
+				Description: "Description",
+				ImageURL:    "http://example.com/image.jpg",
+				Price:       100,
+			},
+			userID:     int64(1),
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name: "invalid title characters",
+			request: ad.CreateRequest{
+				Title:       "@#$$%Title",
+				Description: "Description",
+				ImageURL:    "http://example.com/image.jpg",
+				Price:       100,
+			},
 			userID:     int64(1),
 			wantStatus: http.StatusBadRequest,
 		},

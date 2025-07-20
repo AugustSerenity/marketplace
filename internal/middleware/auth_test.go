@@ -10,7 +10,6 @@ import (
 )
 
 func generateValidToken(secretKey string) string {
-
 	claims := jwt.MapClaims{
 		"sub": 12345,
 		"exp": time.Now().Add(time.Hour * 1).Unix(),
@@ -23,6 +22,37 @@ func generateValidToken(secretKey string) string {
 	return tokenString
 }
 
+func generateExpiredToken(secretKey string) string {
+	claims := jwt.MapClaims{
+		"sub": 12345,
+		"exp": time.Now().Add(-1 * time.Hour).Unix(),
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, _ := token.SignedString([]byte(secretKey))
+	return tokenString
+}
+
+func generateTokenWithStringSub(secretKey string) string {
+	claims := jwt.MapClaims{
+		"sub": "not-an-integer",
+		"exp": time.Now().Add(time.Hour).Unix(),
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, _ := token.SignedString([]byte(secretKey))
+	return tokenString
+}
+
+func generateTokenWithWrongSignature(secretKey string) string {
+	wrongKey := "wrongsecret"
+	claims := jwt.MapClaims{
+		"sub": 12345,
+		"exp": time.Now().Add(time.Hour).Unix(),
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, _ := token.SignedString([]byte(wrongKey))
+	return tokenString
+}
+
 func TestAuthMiddleware(t *testing.T) {
 	secretKey := "mysecret"
 	validToken := generateValidToken(secretKey)
@@ -30,8 +60,8 @@ func TestAuthMiddleware(t *testing.T) {
 	noBearerToken := "invalid-token"
 	missingToken := ""
 
+	// Создание тестового обработчика
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-
 		userID, ok := r.Context().Value("userID").(int64)
 		if !ok || userID == 0 {
 			t.Error("Expected userID to be set in context, but got nil or 0")
@@ -50,6 +80,9 @@ func TestAuthMiddleware(t *testing.T) {
 		{"Invalid Token", invalidToken, http.StatusUnauthorized},
 		{"No Bearer Token", noBearerToken, http.StatusUnauthorized},
 		{"Missing Token", missingToken, http.StatusUnauthorized},
+		{"Expired Token", "Bearer " + generateExpiredToken(secretKey), http.StatusUnauthorized},
+		{"Token With String Sub", "Bearer " + generateTokenWithStringSub(secretKey), http.StatusUnauthorized},
+		{"Token With Wrong Signature", "Bearer " + generateTokenWithWrongSignature(secretKey), http.StatusUnauthorized},
 	}
 
 	for _, tt := range tests {

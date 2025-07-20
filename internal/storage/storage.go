@@ -62,8 +62,7 @@ func (s *Storage) CreateAd(ctx context.Context, ad *model.Ad) error {
 		ad.CreatedAt,
 	).Scan(&ad.ID)
 }
-
-func (s *Storage) GetAds(ctx context.Context, req *ad.ListRequest, userID int64) ([]*model.AdWithAuthor, error) {
+func (s *Storage) GetAds(ctx context.Context, req *ad.ListRequest, userID int64, offset, limit int) ([]*model.AdWithAuthor, error) {
 	query := `
         SELECT 
             a.id, 
@@ -86,7 +85,6 @@ func (s *Storage) GetAds(ctx context.Context, req *ad.ListRequest, userID int64)
         LIMIT $5 OFFSET $6
     `
 
-	offset := (req.Page - 1) * req.PageSize
 	rows, err := s.db.QueryContext(
 		ctx,
 		query,
@@ -94,7 +92,7 @@ func (s *Storage) GetAds(ctx context.Context, req *ad.ListRequest, userID int64)
 		req.MaxPrice,
 		req.SortBy,
 		req.SortOrder,
-		req.PageSize,
+		limit,
 		offset,
 	)
 	if err != nil {

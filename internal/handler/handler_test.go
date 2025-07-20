@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -20,26 +21,31 @@ import (
 )
 
 type mockService struct {
-	RegistrationUserFunc func(ctx context.Context, user *model.User) error
+	RegisterUserFunc     func(ctx context.Context, req *auth.RegistrationRequest) (*auth.RegistrationResponse, error)
 	LoginUserFunc        func(ctx context.Context, login, password string) (string, error)
-	CreateAdFunc         func(ctx context.Context, ad *model.Ad) error
+	CreateAdFunc         func(ctx context.Context, req ad.CreateRequest, userID int64) (*model.Ad, error)
 	GetAdsFunc           func(ctx context.Context, req *ad.ListRequest, userID int64) ([]*model.AdWithAuthor, error)
+	ParseListRequestFunc func(q url.Values) (ad.ListRequest, error)
 }
 
-func (m *mockService) RegistrationUser(ctx context.Context, user *model.User) error {
-	return m.RegistrationUserFunc(ctx, user)
+func (m *mockService) RegisterUser(ctx context.Context, req *auth.RegistrationRequest) (*auth.RegistrationResponse, error) {
+	return m.RegisterUserFunc(ctx, req)
 }
 
 func (m *mockService) LoginUser(ctx context.Context, login, password string) (string, error) {
 	return m.LoginUserFunc(ctx, login, password)
 }
 
-func (m *mockService) CreateAd(ctx context.Context, ad *model.Ad) error {
-	return m.CreateAdFunc(ctx, ad)
+func (m *mockService) CreateAd(ctx context.Context, req ad.CreateRequest, userID int64) (*model.Ad, error) {
+	return m.CreateAdFunc(ctx, req, userID)
 }
 
 func (m *mockService) GetAds(ctx context.Context, req *ad.ListRequest, userID int64) ([]*model.AdWithAuthor, error) {
 	return m.GetAdsFunc(ctx, req, userID)
+}
+
+func (m *mockService) ParseListRequest(q url.Values) (ad.ListRequest, error) {
+	return m.ParseListRequestFunc(q)
 }
 
 func TestHandler_LoginUser(t *testing.T) {
@@ -82,13 +88,6 @@ func TestHandler_LoginUser(t *testing.T) {
 			requestBody: `{"login":"","password":""}`,
 			contentType: "application/json",
 			wantStatus:  http.StatusBadRequest,
-		},
-		{
-			name:        "context cancellation",
-			requestBody: `{"login":"user","password":"password123"}`,
-			contentType: "application/json",
-			mockError:   context.Canceled,
-			wantStatus:  http.StatusRequestTimeout,
 		},
 	}
 
@@ -155,28 +154,19 @@ func TestHandler_UserRegistration(t *testing.T) {
 			contentType: "",
 			wantStatus:  http.StatusBadRequest,
 		},
-		{
-			name:        "reserved login",
-			requestBody: `{"login":"admin","password":"password123"}`,
-			contentType: "application/json",
-			mockError:   errors.New("reserved login"),
-			wantStatus:  http.StatusBadRequest,
-		},
-		{
-			name:        "short password",
-			requestBody: `{"login":"user","password":"123"}`,
-			contentType: "application/json",
-			wantStatus:  http.StatusBadRequest,
-		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockSvc := &mockService{
-				RegistrationUserFunc: func(ctx context.Context, user *model.User) error {
-					user.ID = 1
-					user.Login = "newuser"
-					return tt.mockError
+				RegisterUserFunc: func(ctx context.Context, req *auth.RegistrationRequest) (*auth.RegistrationResponse, error) {
+					if tt.mockError != nil {
+						return nil, tt.mockError
+					}
+					return &auth.RegistrationResponse{
+						ID:    1,
+						Login: req.Login,
+					}, nil
 				},
 			}
 
@@ -236,35 +226,23 @@ func TestHandler_CreateAd(t *testing.T) {
 			userID:     int64(1),
 			wantStatus: http.StatusBadRequest,
 		},
-		{
-			name: "missing title",
-			request: ad.CreateRequest{
-				Description: "Description",
-				ImageURL:    "http://example.com/image.jpg",
-				Price:       100,
-			},
-			userID:     int64(1),
-			wantStatus: http.StatusBadRequest,
-		},
-		{
-			name: "invalid title characters",
-			request: ad.CreateRequest{
-				Title:       "@#$$%Title",
-				Description: "Description",
-				ImageURL:    "http://example.com/image.jpg",
-				Price:       100,
-			},
-			userID:     int64(1),
-			wantStatus: http.StatusBadRequest,
-		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockSvc := &mockService{
-				CreateAdFunc: func(ctx context.Context, ad *model.Ad) error {
-					ad.ID = 1
-					return tt.mockError
+				CreateAdFunc: func(ctx context.Context, req ad.CreateRequest, userID int64) (*model.Ad, error) {
+					if tt.mockError != nil {
+						return nil, tt.mockError
+					}
+					return &model.Ad{
+						ID:          1,
+						Title:       req.Title,
+						Description: req.Description,
+						ImageURL:    req.ImageURL,
+						Price:       req.Price,
+						AuthorID:    userID,
+					}, nil
 				},
 			}
 
@@ -294,6 +272,7 @@ func TestHandler_GetAds(t *testing.T) {
 		userID      interface{}
 		mockAds     []*model.AdWithAuthor
 		mockError   error
+		parseError  error
 		wantStatus  int
 	}{
 		{
@@ -329,9 +308,10 @@ func TestHandler_GetAds(t *testing.T) {
 			wantStatus:  http.StatusInternalServerError,
 		},
 		{
-			name:        "invalid sort values",
-			queryParams: "page=1&page_size=10&sort_by=wrong&sort_order=descend",
+			name:        "invalid params",
+			queryParams: "page=0&page_size=0",
 			userID:      int64(1),
+			parseError:  errors.New("invalid params"),
 			wantStatus:  http.StatusBadRequest,
 		},
 	}
@@ -342,11 +322,22 @@ func TestHandler_GetAds(t *testing.T) {
 				GetAdsFunc: func(ctx context.Context, req *ad.ListRequest, userID int64) ([]*model.AdWithAuthor, error) {
 					return tt.mockAds, tt.mockError
 				},
+				ParseListRequestFunc: func(q url.Values) (ad.ListRequest, error) {
+					if tt.parseError != nil {
+						return ad.ListRequest{}, tt.parseError
+					}
+					return ad.ListRequest{
+						Page:      1,
+						PageSize:  10,
+						SortBy:    "price",
+						SortOrder: "asc",
+					}, nil
+				},
 			}
 
 			h := handler.New(mockSvc, "secret")
 
-			req := httptest.NewRequest(http.MethodGet, "/ads?"+tt.queryParams, nil)
+			req := httptest.NewRequest(http.MethodGet, "/watch-ads?"+tt.queryParams, nil)
 			if tt.userID != nil {
 				req = req.WithContext(context.WithValue(req.Context(), "userID", tt.userID))
 			}

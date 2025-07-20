@@ -11,5 +11,5 @@ type Storage interface {
 	CreateUser(ctx context.Context, user *model.User) error
 	GetUserByLogin(ctx context.Context, login string) (*model.User, error)
 	CreateAd(ctx context.Context, ad *model.Ad) error
-	GetAds(ctx context.Context, req *ad.ListRequest, userID int64) ([]*model.AdWithAuthor, error)
+	GetAds(ctx context.Context, req *ad.ListRequest, userID int64, offset, limit int) ([]*model.AdWithAuthor, error)
 }

@@ -105,3 +105,59 @@ func TestAuthMiddleware(t *testing.T) {
 		})
 	}
 }
+
+func TestOptionalAuthMiddleware(t *testing.T) {
+	secretKey := "mysecret"
+	validToken := generateValidToken(secretKey)
+	invalidToken := "Bearer invalid.token.here"
+
+	tests := []struct {
+		name         string
+		token        string
+		expectUserID bool
+		expectStatus int
+	}{
+		{
+			name:         "No Token Provided",
+			token:        "",
+			expectUserID: false,
+			expectStatus: http.StatusOK,
+		},
+		{
+			name:         "Valid Token Provided",
+			token:        "Bearer " + validToken,
+			expectUserID: true,
+			expectStatus: http.StatusOK,
+		},
+		{
+			name:         "Invalid Token Provided",
+			token:        invalidToken,
+			expectUserID: false,
+			expectStatus: http.StatusOK, // still OK because it's optional
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				_, ok := r.Context().Value("userID").(int64)
+				if ok != tt.expectUserID {
+					t.Errorf("expected userID presence: %v, got: %v", tt.expectUserID, ok)
+				}
+				w.WriteHeader(http.StatusOK)
+			})
+
+			req := httptest.NewRequest("GET", "/optional", nil)
+			if tt.token != "" {
+				req.Header.Set("Authorization", tt.token)
+			}
+
+			w := httptest.NewRecorder()
+			OptionalAuthMiddleware(secretKey)(handler).ServeHTTP(w, req)
+
+			if w.Code != tt.expectStatus {
+				t.Errorf("expected status %d, got %d", tt.expectStatus, w.Code)
+			}
+		})
+	}
+}

@@ -33,7 +33,7 @@ func (h *Handler) Route() http.Handler {
 	router.HandleFunc("POST /auth-register", h.UserRegistration)
 	router.HandleFunc("POST /auth-login", h.LoginUser)
 	router.Handle("POST /create-ads", middleware.AuthMiddleware(h.secret)(http.HandlerFunc(h.CreateAd)))
-	router.Handle("GET /watch-ads", middleware.AuthMiddleware(h.secret)(http.HandlerFunc(h.GetAds)))
+	router.Handle("GET /watch-ads", middleware.OptionalAuthMiddleware(h.secret)(http.HandlerFunc(h.GetAds)))
 
 	return router
 }

@@ -349,3 +349,46 @@ func TestHandler_GetAds(t *testing.T) {
 		})
 	}
 }
+
+func TestHandler_GetAds_ContentCheck(t *testing.T) {
+	mockAds := []*model.AdWithAuthor{
+		{
+			ID:          1,
+			Title:       "Cool Bike",
+			Description: "Fast and red",
+			ImageURL:    "http://image.jpg",
+			Price:       500,
+			AuthorID:    42,
+			AuthorLogin: "biker",
+			CreatedAt:   time.Now(),
+		},
+	}
+
+	mockSvc := &mockService{
+		GetAdsFunc: func(ctx context.Context, req *ad.ListRequest, userID int64) ([]*model.AdWithAuthor, error) {
+			return mockAds, nil
+		},
+		ParseListRequestFunc: func(q url.Values) (ad.ListRequest, error) {
+			return ad.ListRequest{Page: 1, PageSize: 10}, nil
+		},
+	}
+
+	h := handler.New(mockSvc, "secret")
+
+	req := httptest.NewRequest(http.MethodGet, "/watch-ads?page=1&page_size=10", nil)
+	req = req.WithContext(context.WithValue(req.Context(), "userID", int64(42))) // same as AuthorID
+	w := httptest.NewRecorder()
+
+	h.GetAds(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var resp []ad.ListResponse
+	err := json.NewDecoder(w.Body).Decode(&resp)
+	require.NoError(t, err)
+	require.Len(t, resp, 1)
+
+	assert.Equal(t, "Cool Bike", resp[0].Title)
+	assert.Equal(t, "biker", resp[0].AuthorLogin)
+	assert.True(t, resp[0].IsOwner)
+}

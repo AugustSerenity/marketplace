@@ -53,3 +53,49 @@ func AuthMiddleware(secretKey string) func(http.Handler) http.Handler {
 		})
 	}
 }
+
+func OptionalAuthMiddleware(secretKey string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			auth := r.Header.Get("Authorization")
+			if auth == "" {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			parts := strings.Split(auth, " ")
+			if len(parts) != 2 || parts[0] != "Bearer" {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			tokenStr := parts[1]
+			token, err := jwt.Parse(tokenStr, func(token *jwt.Token) (interface{}, error) {
+				if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+					return nil, jwt.ErrSignatureInvalid
+				}
+				return []byte(secretKey), nil
+			})
+
+			if err != nil || !token.Valid {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			claims, ok := token.Claims.(jwt.MapClaims)
+			if !ok {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			userID, ok := claims["sub"].(float64)
+			if !ok {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			ctx := context.WithValue(r.Context(), "userID", int64(userID))
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
